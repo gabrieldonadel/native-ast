@@ -73,8 +73,12 @@ Head-to-head against the shipping regex transforms:
 | Kotlin, customized MainActivity | **corrupts the file** | 4/4 |
 
 Installed size is 8.9 MB for WASM against 97 MB for the native addon, with no
-node-gyp and no platform prebuild matrix. Cold start is *faster* than native
-(19.8 ms vs 28.1 ms) because there is no addon to dlopen.
+node-gyp and no platform prebuild matrix.
+
+Startup depends on whether the file cache is warm. On a cold cache native is
+slower, because it pages in a 3.4 MB addon: 33 ms against WASM's 20 ms. Once
+warm, native wins: ~6 ms against ~15 ms. Both are small enough not to matter
+for a prebuild that parses one file.
 
 ## An upstream bug in tree-sitter-swift
 

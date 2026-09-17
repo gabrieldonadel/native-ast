@@ -409,11 +409,18 @@ file.type('MainActivity').func('createReactActivityDelegate()');   // same API
 | minimum shippable | 3.4 MB prebuild × 6 platforms × N languages | **3.2 MB + 3.4 MB, two files** |
 | gzipped download | — | **~0.6 MB** |
 | native addon / platform matrix | yes | **no** |
-| cold start (require → first parse) | 28.1 ms | 19.8 ms |
+| startup, cold file cache | 33 ms | **20 ms** |
+| startup, warm file cache | **~6 ms** | ~15 ms |
 | parse throughput | 1.0x | 0.59x |
 
-WASM's per-parse penalty is irrelevant — a plugin parses one file, and cold
-start is *faster* than native because there is no addon to dlopen.
+WASM's per-parse penalty is irrelevant — a plugin parses one file. Startup
+depends on the file cache: cold, native is slower because it pages in a 3.4 MB
+addon (33 ms vs 20 ms); warm, native wins (~6 ms vs ~15 ms), measured over
+five consecutive runs. Neither figure is large enough to matter.
+
+(An earlier draft of this document reported a single cold-cache measurement,
+28.1 ms native against 19.8 ms WASM, as though it were the general case. It is
+not — that was the first run only.)
 
 ### Recommendation
 
