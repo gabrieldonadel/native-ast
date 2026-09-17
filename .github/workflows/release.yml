@@ -4,20 +4,23 @@ on:
   push:
     tags: ['v*']
 
-permissions:
-  contents: read
-  id-token: write # npm trusted publishing (OIDC)
-
 jobs:
+  # Builds the .wasm grammars from the grammars/ submodules. Separate job with
+  # no id-token permission, so the toolchain it installs cannot reach the npm
+  # publishing credential.
+  build-wasm:
+    uses: ./.github/workflows/build-wasm.yml
+
   publish:
+    needs: build-wasm
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC)
     steps:
+      # No submodules: the grammars are only needed to build the .wasm, which
+      # build-wasm already did. This job runs first-party actions only.
       - uses: actions/checkout@v4
-        with:
-          # The .wasm artifacts are committed, so the grammars are not needed
-          # to publish — only to assert they match the npm grammar versions the
-          # native backend uses. See test/grammar-sync.js.
-          submodules: recursive
 
       # OIDC trusted publishing needs npm >= 11.5.1. Pin npm 11 —
       # npm 12 dropped Node 20 support.
@@ -26,35 +29,33 @@ jobs:
           node-version: 20
       - run: npm install -g npm@11
 
-      # .npmrc sets legacy-peer-deps because both grammar packages pin stale
-      # tree-sitter peer ranges. They are devDependencies only.
       - run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: .
 
       - name: Check tag matches package.json version
         run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
 
-      # The .wasm grammars are committed, so CI needs no emscripten and there
-      # is no build step. Guard against publishing a tarball without them.
+      # The .wasm files are the whole package and are no longer in git, so
+      # verify they crossed over from build-wasm and into the tarball.
       - name: Check the .wasm grammars are in the tarball
         run: |
           npm pack --dry-run --json > "$RUNNER_TEMP/pack.json"
           node -e "
-            const files = require(process.env.RUNNER_TEMP + '/pack.json')[0].files.map(f => f.path);
+            const files = require(process.env.RUNNER_TEMP + '/pack.json')[0].files;
             for (const w of ['tree-sitter-swift.wasm', 'tree-sitter-kotlin.wasm']) {
-              if (!files.includes(w)) { console.error('missing from tarball: ' + w); process.exit(1); }
+              const f = files.find((x) => x.path === w);
+              if (!f) { console.error('missing from tarball: ' + w); process.exit(1); }
+              if (f.size < 1e6) { console.error(w + ' is only ' + f.size + ' bytes'); process.exit(1); }
+              console.log(w + '  ' + f.size + ' bytes');
             }
-            console.log('tarball contains both grammars (' + files.length + ' files)');
           "
 
-      # Self-contained: the swift:*/kotlin:* head-to-head tests need a local
-      # expo/expo checkout, so CI runs the portable smoke test instead.
-      - run: npm run grammar-sync
+      # Behavioural gates on the freshly built artifacts.
       - run: npm run smoke
-
-      # The community-plugin suite is self-contained: it vendors the shared
-      # AppDelegate fixture and gets the real transforms from
-      # @expo/config-plugins. The parse-conformance section self-skips without
-      # a local expo/config-plugins checkout.
       - run: npm run plugins
 
       # No registry-url needed: OIDC trusted publishing uses no .npmrc auth.

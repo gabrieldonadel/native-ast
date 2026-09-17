@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-wasm:
+    uses: ./.github/workflows/build-wasm.yml
+
+  test:
+    needs: build-wasm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: .
+
+      # smoke asserts '#if DEBUG' parses, which fails if the Swift grammar lost
+      # the scanner fix. plugins runs the suite from expo/config-plugins; its
+      # parse-conformance section self-skips without a local checkout.
+      - run: npm run smoke
+      - run: npm run plugins
+
+      - name: Check the .wasm grammars would be published
+        run: |
+          npm pack --dry-run --json > "$RUNNER_TEMP/pack.json"
+          node -e "
+            const files = require(process.env.RUNNER_TEMP + '/pack.json')[0].files;
+            for (const w of ['tree-sitter-swift.wasm', 'tree-sitter-kotlin.wasm']) {
+              const f = files.find((x) => x.path === w);
+              if (!f) { console.error('missing from tarball: ' + w); process.exit(1); }
+              if (f.size < 1e6) { console.error(w + ' is only ' + f.size + ' bytes'); process.exit(1); }
+              console.log(w + '  ' + f.size + ' bytes');
+            }
+          "

@@ -1,0 +1,66 @@
+name: Build WASM
+
+# Reusable: called by ci.yml and release.yml so the emscripten pin and the
+# build steps exist in exactly one place.
+on:
+  workflow_call:
+    inputs:
+      retention-days:
+        type: number
+        default: 7
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # No id-token: this job installs a toolchain, so it must not be able to
+    # reach the npm publishing credential.
+    permissions:
+      contents: read
+    env:
+      EMSDK_VERSION: 3.1.74
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The .wasm files are built from these forks; they are not in git.
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      # Asserts the submodules and the npm grammar devDependencies are the same
+      # versions, so "WASM matches native" compares the same grammar.
+      - run: npm run grammar-sync
+
+      # Installed from the official emsdk repo rather than a third-party action,
+      # to keep the release path free of actions we do not control. Pinned:
+      # the emscripten version is part of the artifact's provenance.
+      - name: Install emscripten ${{ env.EMSDK_VERSION }}
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          cd "$RUNNER_TEMP/emsdk"
+          ./emsdk install "$EMSDK_VERSION"
+          ./emsdk activate "$EMSDK_VERSION"
+
+      - name: Build both grammars to WASM
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          emcc --version | head -1
+          ./build-wasm.sh
+
+      # emscripten output is not guaranteed identical across host platforms, so
+      # the gates are behavioural rather than a hash comparison. Digests are
+      # recorded for provenance.
+      - name: Record artifact digests
+        run: shasum -a 256 tree-sitter-swift.wasm tree-sitter-kotlin.wasm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm
+          path: |
+            tree-sitter-swift.wasm
+            tree-sitter-kotlin.wasm
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}

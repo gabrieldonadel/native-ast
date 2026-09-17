@@ -424,9 +424,9 @@ not — that was the first run only.)
 
 ### Recommendation
 
-1. **Ship WASM for both languages.** Two committed `.wasm` files, no node-gyp,
-   no ABI risk, no platform matrix, works in any Node and in the browser. Both
-   are provably tree-identical to native across 11109 files (6742 Swift +
+1. **Ship WASM for both languages.** Two `.wasm` files, no node-gyp, no ABI
+   risk, no platform matrix, works in any Node and in the browser. Both are
+   provably tree-identical to native across 11109 files (6742 Swift +
    4367 Kotlin).
 2. **Own the grammars as forks, pinned as submodules.** Both grammars are now
    forks in `grammars/`, pinned to the commit matching their npm release and
@@ -438,10 +438,12 @@ not — that was the first run only.)
    `npm run grammar-sync` asserts the submodules and the npm grammar packages
    stay on the same versions — otherwise "WASM matches native" compares two
    different grammars and means nothing.
-3. **Vendor the artifacts and pin the runtime.** Building needs emsdk, which is
-   not a reasonable install-time dependency, so the `.wasm` files are committed
-   and the submodules are only needed to rebuild them. §6 shows recovery
-   behaviour changes between runtime versions, so pin `web-tree-sitter`.
+3. **Build the artifacts in CI and pin the runtime.** Building needs emsdk,
+   which is not a reasonable install-time dependency — so CI compiles both
+   grammars from the submodules on every release and publishes them in the
+   tarball, and consumers never need a toolchain. The `.wasm` files stay out of
+   git as build output. §6 shows recovery behaviour changes between runtime
+   versions, so pin `web-tree-sitter`.
 4. **Start with Kotlin, not Swift.** Lower error rate (0.78% vs 6.35%), no
    patch needed, `.gradle.kts` free, and the worst regex failure mode found in
    this whole investigation (comment corruption) is on the Android side.

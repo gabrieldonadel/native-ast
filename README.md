@@ -21,8 +21,7 @@ test/config-plugins/    real community plugins from expo/config-plugins as a sui
 test/compare*.js        head-to-head against the shipping regex transforms
 test/corpus.js          native-vs-WASM equivalence and error rates over a corpus
 grammars/               the two grammar forks, pinned as git submodules
-tree-sitter-*.wasm      built from grammars/, committed so CI needs no emscripten
-build-wasm.sh           rebuild both .wasm from the submodules (needs emsdk)
+build-wasm.sh           builds both .wasm from the submodules (needs emsdk)
 scanner-calloc.patch    the tree-sitter-swift fix, for upstreaming (see below)
 RELEASING.md            how to cut a release
 ```
@@ -161,14 +160,20 @@ measurements above carry over directly. The forks let us pin and patch without
 waiting on upstream review; the commits are written to be cherry-pickable if
 upstream wants them.
 
+The `.wasm` files are **not in git** — they are build output. CI builds them
+from the submodules on every release and publishes them in the tarball, so
+installing from npm gives you a prebuilt copy. Working from a source checkout,
+build them once:
+
 ```sh
-git submodule update --init --recursive   # only needed to rebuild the .wasm
-npm run build:wasm                        # needs emsdk on PATH
+git submodule update --init --recursive
+source /path/to/emsdk/emsdk_env.sh        # https://emscripten.org/docs/getting_started
+npm run build:wasm
 npm run grammar-sync                      # asserts grammars/ matches the npm versions
 ```
 
-Submodules are **not** needed to install or use the package — the `.wasm` files
-are committed and the published tarball contains no grammar sources.
+Anything that parses will tell you to do this if the files are missing. The
+published tarball contains the two `.wasm` files and no grammar sources.
 
 `npm run grammar-sync` exists because the native backend used for diffing comes
 from the npm grammar packages while the `.wasm` comes from `grammars/`. If those
@@ -194,6 +199,7 @@ standalone diff, kept for upstreaming.
 
 ```sh
 npm i        # see .npmrc — both grammars' `tree-sitter` peer ranges lag the runtime
+npm run build:wasm   # required first in a source checkout; see Grammars below
 
 npm run swift:native    # regex vs AST, Swift
 npm run swift:wasm

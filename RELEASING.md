@@ -1,11 +1,24 @@
 # Releasing `native-ast`
 
 Releases are automated. Push a `vX.Y.Z` tag to run
-[.github/workflows/release.yml](.github/workflows/release.yml), which verifies
-the tarball and publishes to npm.
+[.github/workflows/release.yml](.github/workflows/release.yml), which builds the
+two `.wasm` grammars, verifies the tarball, and publishes to npm.
 
-There is no build step — `src/` is plain CommonJS and the `.wasm` grammars are
-committed — so CI publishes from a plain checkout.
+`src/` is plain CommonJS and needs no build. The `.wasm` grammars are build
+output and are **not** in git — CI compiles them from the `grammars/`
+submodules with emscripten, then hands them to the publish job as an artifact.
+
+The workflow is two jobs on purpose:
+
+- **`build-wasm`** checks out the submodules, installs emscripten and compiles.
+  It has `contents: read` only, so nothing in the toolchain it installs can
+  reach the npm publishing credential.
+- **`publish`** has `id-token: write`, downloads the artifact, and runs only
+  first-party actions.
+
+emscripten is installed by cloning the official `emscripten-core/emsdk` repo at
+a pinned version rather than via a third-party action, to keep the release path
+free of actions we do not control.
 
 ## One-time setup
 
@@ -26,7 +39,9 @@ Configure it, then re-run the workflow.
 git commit -am "release v0.0.2"
 git tag v0.0.2
 
-# 2. Sanity-check the tarball contents. Both .wasm files must be listed.
+# 2. Sanity-check the tarball contents. Both .wasm files must be listed —
+#    build them first if this is a fresh checkout, since they are not in git.
+npm run build:wasm     # needs emsdk on PATH
 npm pack --dry-run
 
 # 3. Push the branch and the tag. The tag push triggers the release.
@@ -42,8 +57,10 @@ real release is `0.0.1`.
 
 1. **Tag matches `package.json` version.** `v0.0.2` must pair with `"version":
    "0.0.2"`.
-2. **Both `.wasm` grammars are in the tarball.** They are the whole package —
-   a tarball without them installs and then fails at `Language.load`.
+2. **Both `.wasm` grammars are in the tarball, and each is over 1 MB.** They
+   are the whole package — a tarball without them installs and then fails at
+   `Language.load`. Since they are no longer in git, this also confirms the
+   artifact actually made it across from `build-wasm`.
 3. **`npm run grammar-sync` passes**: the `grammars/` submodules are on the
    same versions as the npm grammar packages, and the Swift fork carries the
    scanner fix.
@@ -55,11 +72,9 @@ real release is `0.0.1`.
 
 ## Notes
 
-- **The `.wasm` grammars are committed to git.** CI publishes them from a plain
-  checkout and does not need emscripten or the submodules.
-
-- **They are built from `grammars/`, our two forks pinned as submodules.** To
-  change a grammar: update the fork, move the submodule pointer, then
+- **The `.wasm` grammars are build output, not in git.** CI builds them on
+  every release. To change a grammar: update the fork, move the submodule
+  pointer, commit that, and the next tag picks it up. Locally:
 
   ```sh
   git submodule update --init --recursive
@@ -68,7 +83,15 @@ real release is `0.0.1`.
   npm run grammar-sync     # keep the npm grammar devDeps on the same version
   ```
 
-  and commit both the new `.wasm` files and the submodule pointer.
+- **`.gitignore` lists both `.wasm` files, and npm still publishes them.**
+  npm's `files` allowlist takes precedence over `.gitignore`, so the tarball
+  contains them even though git does not. Verified; the tarball check in CI
+  guards it anyway.
+
+- **CI artifacts are not byte-compared against a local build.** emscripten
+  output is not guaranteed identical across host platforms, so the gates are
+  behavioural — `smoke` and `plugins` run against the freshly built artifacts,
+  and their digests are printed in the build log for provenance.
 
 - **The Swift fork carries scanner fixes.** Upstream's
   `external_scanner_create()` calls `calloc(0, sizeof(struct ScannerState))`,

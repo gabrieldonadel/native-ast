@@ -25,10 +25,23 @@ function nativeParser(lang) {
 }
 
 async function wasmParser(lang, wasmPath) {
+  const file = wasmPath ?? path.join(__dirname, '..', WASM[lang]);
+  // The .wasm files ship in the npm tarball but are not in git — they are
+  // build output. In a source checkout they have to be built first.
+  if (!require('fs').existsSync(file)) {
+    throw new Error(
+      `${WASM[lang]} not found.\n` +
+        `It is build output, not checked into git. To build it:\n` +
+        `  git submodule update --init --recursive\n` +
+        `  source /path/to/emsdk/emsdk_env.sh\n` +
+        `  npm run build:wasm\n` +
+        `(installing the package from npm gives you a prebuilt copy instead)`
+    );
+  }
   const { Parser, Language } = require('web-tree-sitter');
   await Parser.init();
   const p = new Parser();
-  p.setLanguage(await Language.load(wasmPath ?? path.join(__dirname, '..', WASM[lang])));
+  p.setLanguage(await Language.load(file));
   return p;
 }
 

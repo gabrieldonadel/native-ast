@@ -1,3 +1,9 @@
 node_modules/
 *.log
 .DS_Store
+
+# Built by `npm run build:wasm` from the forks in grammars/, and by CI on
+# release. Kept out of git: they are 6.8 MB of build output, and npm's `files`
+# allowlist includes them in the published tarball regardless of this file.
+tree-sitter-swift.wasm
+tree-sitter-kotlin.wasm
