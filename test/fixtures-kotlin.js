@@ -1,13 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const DIR = path.join(
-  process.env.HOME,
-  'Developer/expo/packages/install-expo-modules/src/plugins/android/__tests__/fixtures'
-);
-
-// Real fixture from install-expo-modules (React Native 0.73 template).
-const vanilla = fs.readFileSync(path.join(DIR, 'MainActivity-rn073.kt'), 'utf8');
+// Real fixture from install-expo-modules (React Native 0.73 template),
+// vendored so this runs without a local expo checkout. See fixtures/PROVENANCE.md.
+const vanilla = fs.readFileSync(path.join(__dirname, 'fixtures', 'MainActivity-rn073.kt'), 'utf8');
 
 // Customized the way real apps customize it:
 //  - a doc comment that spells the delegate with a constructor call

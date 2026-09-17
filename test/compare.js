@@ -1,5 +1,5 @@
 const { parseSwift, useBackend } = require('../src/index.js');
-const { vanilla, customized, withConditionalDecl } = require('./fixtures.js');
+const fixtures = require('./fixtures.js');
 
 /* ---------- 1. the shipping regex implementation ----------------------------
  * addSwiftImports is the real one from @expo/config-plugins. The transform
@@ -81,7 +81,7 @@ const checks = {
 const backend = process.argv[2] === 'wasm' ? 'wasm' : 'native';
 await useBackend(backend, ['swift']);
 console.log(`backend: ${backend}`);
-for (const [name, src] of Object.entries({ vanilla, customized, withConditionalDecl })) {
+for (const [name, src] of Object.entries(fixtures)) {
   console.log(`\n=== fixture: ${name} ===`);
   for (const [label, fn] of [['regex', regexTransform], ['ast  ', astTransform]]) {
     let out, error = null;

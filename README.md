@@ -11,6 +11,132 @@ reports success. This explores replacing that with real parsing.
 **Read [FINDINGS.md](./FINDINGS.md) for the full investigation, measurements
 and plan.**
 
+## The same transform, both ways
+
+This is the real `install-expo-modules` transform that converts a bare React
+Native `AppDelegate.swift` into an Expo one.
+
+**Before** — `@expo/config-plugins`, verbatim from
+[`withIosModulesAppDelegate.ts`](https://github.com/expo/expo/blob/main/packages/install-expo-modules/src/plugins/ios/withIosModulesAppDelegate.ts):
+
+```js
+if (!contents.match(/^(internal\s+)?import\s+Expo\s*$/m)) {
+  contents = addSwiftImports(contents, ['Expo']);
+  if (useInternalImport) {
+    contents = contents.replace(/^import Expo$/m, 'internal import Expo');
+  }
+}
+
+contents = contents.replace(
+  /^(class\s+AppDelegate\s*:\s*)UIResponder,\s*UIApplicationDelegate(\W+)/m,
+  '$1ExpoAppDelegate$2'
+);
+
+contents = contents.replace(
+  /\b(func application\([\s\S]+?didFinishLaunchingWithOptions launchOptions[\s\S]+?\{[\s\S]+?)(return true)([\s\S]+?\})/m,
+  'override $1return super.application(application, didFinishLaunchingWithOptions: launchOptions)$3'
+);
+
+return contents;
+```
+
+**After** — `native-ast`:
+
+```js
+const file = parseSwift(contents);
+
+file.addImport('Expo', { access: 'internal' });
+file.type('AppDelegate')
+    .setSupertype('ExpoAppDelegate', { replacing: ['UIResponder', 'UIApplicationDelegate'] })
+    .func('application(_:didFinishLaunchingWithOptions:)')
+    .addModifier('override')
+    .replaceReturnValue('super.application(application, didFinishLaunchingWithOptions: launchOptions)');
+
+return file.toString();
+```
+
+Both produce the same four-line diff on the stock template:
+
+```diff
++internal import Expo
+
+-class AppDelegate: UIResponder, UIApplicationDelegate {
++class AppDelegate: ExpoAppDelegate {
+
+-  func application(
++  override func application(
+
+-    return true
++    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+```
+
+They diverge on a real app. The third regex requires the parameter to be named
+`launchOptions` **and** the body to end in the literal `return true`; the second
+requires the superclass list to be exactly `UIResponder, UIApplicationDelegate`.
+When any of that differs, `String.replace` matches nothing, returns the input
+unchanged, and the plugin reports success.
+
+| the app has | before | after |
+|---|---|---|
+| the stock template | ok | ok |
+| an extra protocol conformance | ok | ok, conformance kept |
+| `launchOptions` renamed to `options` | **silently skips `override` and the `super` call** | ok |
+| `return self.finishLaunch()` instead of `return true` | **silently skips `override` and the `super` call** | ok |
+
+An AppDelegate missing `override` and the `super` call still compiles. The app
+launches, Expo's own `didFinishLaunching` never runs, and nothing in the
+prebuild output says why.
+
+`npm run swift:wasm` runs this comparison over those four fixtures; `npm test`
+covers the underlying helpers one by one.
+
+### Kotlin, where it goes further than a no-op
+
+Wrapping the React activity delegate. **Before** — `findNewInstanceCodeBlock`
+searches the whole file for `` / (object\s*:\s*)?DefaultReactActivityDelegate\(/ ``
+and takes the first textual hit:
+
+```js
+const block = findNewInstanceCodeBlock(mainActivity, 'DefaultReactActivityDelegate', 'kt');
+if (block == null) throw new Error('Unable to find ... new instance code block.');
+mainActivity = replaceContentsWithOffset(
+  mainActivity,
+  `ReactActivityDelegateWrapper(this, BuildConfig.IS_NEW_ARCHITECTURE_ENABLED, ${block.code})`,
+  block.start,
+  block.end
+);
+```
+
+**After** — resolve the function, then find the call inside its body:
+
+```js
+const file = parseKotlin(contents);
+const fn = file.type('MainActivity').func('createReactActivityDelegate()');
+const call = findCall(fn.body, 'DefaultReactActivityDelegate');
+
+file.addImport('expo.modules.ReactActivityDelegateWrapper');
+file.edits.replace(call.startIndex, call.endIndex,
+  `ReactActivityDelegateWrapper(this, BuildConfig.IS_NEW_ARCHITECTURE_ENABLED, ${call.text})`);
+return file.toString();
+```
+
+Give the first version a `MainActivity.kt` whose doc comment mentions the
+delegate with a constructor call — which the real fixtures do — and it rewrites
+**the comment**:
+
+```kotlin
+  /**
+   * Returns the instance of the [ReactActivityDelegate]. We use [DefaultReactActivityDelegate]
+   * Previously this returned ReactActivityDelegateWrapper(this, BuildConfig.IS_NEW_ARCHITECTURE_ENABLED, DefaultReactActivityDelegate(this, name, false));
+   */
+  override fun createReactActivityDelegate(): ReactActivityDelegate =
+      DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
+```
+
+The real delegate is left unwrapped, an unused import is added, and the file
+still compiles. Comments are not in the AST, so the second version cannot do
+this.
+
 ## What's here
 
 ```
@@ -250,8 +376,9 @@ npm run bench           # cold start + parse cost
 npm run probe           # the Swift '#' minimal cases
 ```
 
-The corpus tools take paths, and the head-to-head fixtures read from a local
-`expo/expo` checkout at `~/Developer/expo`:
+Fixtures are vendored in `test/fixtures/` (see
+[PROVENANCE.md](./test/fixtures/PROVENANCE.md)), so everything above runs with
+no other checkouts. The corpus tools take paths:
 
 ```sh
 node test/corpus.js swift  '*.swift'      ~/path/to/some-ios-app

@@ -162,6 +162,101 @@ describe('insertContentsInsideSwiftClassBlock  ->  type.appendMember', () => {
   });
 });
 
+describe('the whole transform, per customization', () => {
+  // The README table. Each variant isolates one thing a real app changes, so
+  // it is clear which regex it defeats.
+  const fixtures = require('../fixtures.js');
+
+  const applyRegex = (contents) => {
+    if (!contents.match(/^(internal\s+)?import\s+Expo\s*$/m)) {
+      contents = codeMod.addSwiftImports(contents, ['Expo']);
+      contents = contents.replace(/^import Expo$/m, 'internal import Expo');
+    }
+    contents = contents.replace(
+      /^(class\s+AppDelegate\s*:\s*)UIResponder,\s*UIApplicationDelegate(\W+)/m,
+      '$1ExpoAppDelegate$2'
+    );
+    return contents.replace(
+      /\b(func application\([\s\S]+?didFinishLaunchingWithOptions launchOptions[\s\S]+?\{[\s\S]+?)(return true)([\s\S]+?\})/m,
+      'override $1return super.application(application, didFinishLaunchingWithOptions: launchOptions)$3'
+    );
+  };
+
+  const applyAst = (contents) => {
+    const file = parseSwift(contents);
+    const appDelegate = file.type('AppDelegate');
+    const fn = appDelegate
+      .functions()
+      .find((f) => f.selector?.startsWith('application(_:didFinishLaunchingWithOptions:'));
+    const param = fn.node.namedChildren
+      .filter((c) => c.type === 'parameter')
+      .find((c) => c.childForFieldName('external_name')?.text === 'didFinishLaunchingWithOptions');
+    const opts = param?.childForFieldName('name')?.text ?? 'launchOptions';
+
+    file.addImport('Expo', { access: 'internal' });
+    appDelegate.setSupertype('ExpoAppDelegate', {
+      replacing: ['UIResponder', 'UIApplicationDelegate'],
+    });
+    fn.addModifier('override');
+    fn.replaceReturnValue(`super.application(application, didFinishLaunchingWithOptions: ${opts})`);
+    return file.toString();
+  };
+
+  const applied = (out) => ({
+    import: /^internal import Expo$/m.test(out),
+    superclass: /class AppDelegate: ExpoAppDelegate/.test(out),
+    override: /override func application\(/.test(out),
+    superCall: /return super\.application\(application, didFinishLaunchingWithOptions:/.test(out),
+  });
+
+  it('regex: handles the stock template', () => {
+    assert.deepStrictEqual(applied(applyRegex(fixtures.vanilla)), {
+      import: true, superclass: true, override: true, superCall: true,
+    });
+  });
+
+  it('regex: handles an added protocol conformance, because \\W+ captures the comma', () => {
+    const out = applyRegex(fixtures.extraConformance);
+    assert.deepStrictEqual(applied(out), {
+      import: true, superclass: true, override: true, superCall: true,
+    });
+    assert.match(out, /UNUserNotificationCenterDelegate/, 'and keeps it');
+  });
+
+  it('regex: silently skips `override` and the super call when the parameter is renamed', () => {
+    assert.deepStrictEqual(applied(applyRegex(fixtures.renamedParam)), {
+      import: true, superclass: true, override: false, superCall: false,
+    });
+  });
+
+  it('regex: silently skips them when the body does not end in `return true`', () => {
+    assert.deepStrictEqual(applied(applyRegex(fixtures.computedReturn)), {
+      import: true, superclass: true, override: false, superCall: false,
+    });
+  });
+
+  for (const name of ['vanilla', 'extraConformance', 'renamedParam', 'computedReturn', 'customized']) {
+    it(`ast: applies every edit on the ${name} fixture`, () => {
+      const out = applyAst(fixtures[name]);
+      assert.deepStrictEqual(applied(out), {
+        import: true, superclass: true, override: true, superCall: true,
+      });
+      assert.ok(!parseSwift(out).hasParseErrors);
+      assert.strictEqual(applyAst(out), out, 'and is idempotent');
+    });
+  }
+
+  it('ast: keeps an unrelated conformance while swapping the superclass', () => {
+    const out = applyAst(fixtures.extraConformance);
+    assert.match(out, /class AppDelegate: ExpoAppDelegate, UNUserNotificationCenterDelegate \{/);
+  });
+
+  it('ast: uses the real parameter name, whatever it was renamed to', () => {
+    const out = applyAst(fixtures.renamedParam);
+    assert.match(out, /didFinishLaunchingWithOptions: options\)/);
+  });
+});
+
 describe('idempotency, which plugins need because prebuild re-runs', () => {
   it('ast: applying the same edits twice changes nothing', () => {
     const transform = (src) => {
