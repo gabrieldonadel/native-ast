@@ -37,16 +37,25 @@ jobs:
       # Installed from the official emsdk repo rather than a third-party action,
       # to keep the release path free of actions we do not control. Pinned:
       # the emscripten version is part of the artifact's provenance.
+      # ~330 MB of toolchain download, so cache it. Keyed on the pinned
+      # version, so bumping EMSDK_VERSION misses the cache and reinstalls.
+      - uses: actions/cache@v4
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}
+
       - name: Install emscripten ${{ env.EMSDK_VERSION }}
         run: |
-          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
-          cd "$RUNNER_TEMP/emsdk"
+          if [ ! -x "$HOME/emsdk/emsdk" ]; then
+            git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+          fi
+          cd "$HOME/emsdk"
           ./emsdk install "$EMSDK_VERSION"
           ./emsdk activate "$EMSDK_VERSION"
 
       - name: Build both grammars to WASM
         run: |
-          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          source "$HOME/emsdk/emsdk_env.sh"
           emcc --version | head -1
           ./build-wasm.sh
 

@@ -88,10 +88,20 @@ real release is `0.0.1`.
   contains them even though git does not. Verified; the tarball check in CI
   guards it anyway.
 
-- **CI artifacts are not byte-compared against a local build.** emscripten
-  output is not guaranteed identical across host platforms, so the gates are
-  behavioural — `smoke` and `plugins` run against the freshly built artifacts,
-  and their digests are printed in the build log for provenance.
+- **The build is reproducible across platforms, as observed.** CI on
+  linux-x64 and a local macOS arm64 build produced byte-identical artifacts
+  with the same pins (emscripten 3.1.74, `tree-sitter-cli@0.25.10`):
+
+  ```
+  67855d25046e9eb3cea831f15e1202874653d01d3e57a0bd48375a496e19eb17  tree-sitter-swift.wasm
+  1bb90fde14b54c961126f399104c037c399a4262e23e67128b6c6d662a94ce94  tree-sitter-kotlin.wasm
+  ```
+
+  CI prints the digests but does **not** assert them. One cross-platform data
+  point is not enough to bet a release on, and a toolchain re-release turning
+  every publish red is worse than missing a drift the behavioural gates would
+  catch anyway. If you bump `EMSDK_VERSION` or a submodule, expect these to
+  change and update them here.
 
 - **The Swift fork carries scanner fixes.** Upstream's
   `external_scanner_create()` calls `calloc(0, sizeof(struct ScannerState))`,
