@@ -127,6 +127,52 @@ class SourceFunction {
     return this;
   }
 
+  /** Top-level statements of this function's body, excluding nested closures. */
+  statements() {
+    const body = this.body;
+    if (!body) return [];
+    const stmts = body.namedChildren.find((c) => c.type === 'statements') ?? body;
+    return stmts.namedChildren.filter((c) => c.type !== 'comment');
+  }
+
+  /**
+   * Remove whole statements matching `predicate`, taking each line with them.
+   * Consecutive matches are removed as one range, and if that leaves two blank
+   * lines back to back one is taken too — so deleting statements does not
+   * reformat the surrounding code.
+   */
+  removeStatements(predicate) {
+    const stmts = this.statements();
+    const src = this.file.source;
+
+    // Group runs of consecutive matching statements.
+    const groups = [];
+    for (let i = 0; i < stmts.length; i++) {
+      if (!predicate(stmts[i])) continue;
+      const group = [stmts[i]];
+      while (i + 1 < stmts.length && predicate(stmts[i + 1])) group.push(stmts[++i]);
+      groups.push(group);
+    }
+
+    for (const group of groups) {
+      const first = group[0], last = group[group.length - 1];
+      const start = src.lastIndexOf('\n', first.startIndex - 1) + 1;
+      let end = last.endIndex;
+      while (end < src.length && src[end] !== '\n') end++;
+      if (end < src.length) end++;
+
+      const prevLineStart = src.lastIndexOf('\n', start - 2) + 1;
+      const prevBlank = start === 0 || src.slice(prevLineStart, start - 1).trim() === '';
+      let nextEnd = end;
+      while (nextEnd < src.length && src[nextEnd] !== '\n') nextEnd++;
+      const nextBlank = end < src.length && src.slice(end, nextEnd).trim() === '';
+      if (prevBlank && nextBlank) end = nextEnd + 1;
+
+      this.file.edits.replace(start, end, '');
+    }
+    return this;
+  }
+
   prependStatement(code) {
     const body = this.body;
     if (!body) throw new Error(`${this.selector} has no body`);
@@ -197,6 +243,29 @@ class SourceType {
       specs[specs.length - 1].endIndex,
       [to, ...kept.map((s) => s.text)].join(', ')
     );
+    return this;
+  }
+
+  /** Append a supertype, keeping the existing ones. */
+  addSupertype(name) {
+    const specs = this.L.supertypes(this.node);
+    if (specs.length === 0) throw new Error(`${this.name} has no supertype clause`);
+    const bare = name.replace(/\s*\(.*\)\s*$/s, '').trim();
+    if (specs.map((s) => this.L.supertypeName(s)).includes(bare)) return this;   // idempotent
+    this.file.edits.insert(specs[specs.length - 1].endIndex, `, ${name}`);
+    return this;
+  }
+
+  /** Remove a supertype if present. */
+  removeSupertype(name) {
+    const specs = this.L.supertypes(this.node);
+    const idx = specs.findIndex((s) => this.L.supertypeName(s) === name);
+    if (idx < 0) return this;                                       // idempotent
+    const spec = specs[idx];
+    // Take the preceding comma when there is one, otherwise the following.
+    const start = idx > 0 ? specs[idx - 1].endIndex : spec.startIndex;
+    const end = idx > 0 ? spec.endIndex : (specs[idx + 1] ? specs[idx + 1].startIndex : spec.endIndex);
+    this.file.edits.replace(start, end, '');
     return this;
   }
 

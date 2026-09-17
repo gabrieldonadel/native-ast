@@ -45,5 +45,11 @@ jobs:
       # expo/expo checkout, so CI runs the portable smoke test instead.
       - run: npm run smoke
 
+      # The community-plugin suite is self-contained: it vendors the shared
+      # AppDelegate fixture and gets the real transforms from
+      # @expo/config-plugins. The parse-conformance section self-skips without
+      # a local expo/config-plugins checkout.
+      - run: npm run plugins
+
       # No registry-url needed: OIDC trusted publishing uses no .npmrc auth.
       - run: npm publish

@@ -1,6 +1,6 @@
 {
   "name": "native-ast",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Swift and Kotlin AST traversal from TypeScript, for Expo config plugins",
   "license": "MIT",
   "repository": {
@@ -37,6 +37,8 @@
   "scripts": {
     "smoke": "node test/smoke.js wasm",
     "smoke:native": "node test/smoke.js native",
+    "plugins": "node test/config-plugins/run.js wasm",
+    "plugins:native": "node test/config-plugins/run.js native",
     "swift:native": "node test/compare.js native",
     "swift:wasm": "node test/compare.js wasm",
     "kotlin:native": "node test/compare-kotlin.js native",
@@ -49,6 +51,7 @@
     "web-tree-sitter": "0.25.10"
   },
   "devDependencies": {
+    "@expo/config-plugins": "^57.0.9",
     "@tree-sitter-grammars/tree-sitter-kotlin": "1.1.0",
     "tree-sitter": "0.25.1",
     "tree-sitter-swift": "0.7.1"

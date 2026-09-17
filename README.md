@@ -17,6 +17,7 @@ and plan.**
 src/core.js             parse, traverse, splice-based edits, idempotency, error reporting
 src/languages.js        per-language adapters (Swift and Kotlin node names and shapes)
 test/smoke.js           self-contained; what CI runs before publishing
+test/config-plugins/    real community plugins from expo/config-plugins as a suite
 test/compare*.js        head-to-head against the shipping regex transforms
 test/corpus.js          native-vs-WASM equivalence and error rates over a corpus
 tree-sitter-*.wasm      the two grammars, committed so CI needs no emscripten
@@ -54,9 +55,9 @@ kotlin.type('MainActivity').func('createReactActivityDelegate()');
 when the region it wants to edit did not parse, instead of silently doing
 nothing.
 
-The named helpers — `addImport`, `addModifier`, `setSupertype`,
-`replaceReturnValue`, `appendMember`, `prependStatement`,
-`insertBeforeLastReturn` — check current state first and queue nothing if the
+The named helpers — `addImport`, `addModifier`, `setSupertype`, `addSupertype`,
+`removeSupertype`, `replaceReturnValue`, `appendMember`, `prependStatement`,
+`insertBeforeLastReturn`, `removeStatements` — check current state first and queue nothing if the
 change is already applied. `file.edits.replace(start, end, text)` is the raw
 escape hatch for anything they do not cover, and it is **not** idempotent:
 guard it yourself, or re-running the plugin will apply the edit twice.
@@ -91,6 +92,59 @@ Startup depends on whether the file cache is warm. On a cold cache native is
 slower, because it pages in a 3.4 MB addon: 33 ms against WASM's 20 ms. Once
 warm, native wins: ~6 ms against ~15 ms. Both are small enough not to matter
 for a prebuild that parses one file.
+
+## Tested against real config plugins
+
+`npm run plugins` uses the community plugins in
+[expo/config-plugins](https://github.com/expo/config-plugins) as a suite. It
+runs each plugin's shipping transform — the real one, with `mergeContents` from
+`@expo/config-plugins`, not a copy — and a native-ast equivalent over the
+plugin's own fixture plus variants a real app would have.
+
+Of the 15 packages there, 2 edit Swift or Kotlin source; the rest work through
+plists, Android manifests and the Xcode project.
+
+`expo-uiscene-lifecycle`, `updateAppDelegate(contents, enabled: true)`:
+
+| fixture | shipping | native-ast |
+|---|---|---|
+| stock SDK 57 template | ok | ok — **byte-identical output** |
+| extra protocol conformance | throws | ok |
+| `withModuleName` not `"main"` | throws | ok |
+| startup call reformatted to one line | throws | ok |
+| `launchOptions` parameter renamed | throws | ok |
+
+The plugin matches an exact 6-line block including indentation, so any of those
+four changes makes it refuse. It fails loudly rather than corrupting anything,
+which is the right call — but it also means the plugin does not work on a
+customized AppDelegate.
+
+`react-native-siri-shortcut` behaves the same on both: it needs
+`application(_:continue:restorationHandler:)`, which the shared fixture has and
+the current SDK 57 bare template does not. Both refuse; native-ast's error names
+the missing method instead of printing a regex.
+
+Parse conformance: 4/4 Swift samples in that repo parse cleanly — the `.swift`
+fixtures plus AppDelegate sources embedded in `.ts` fixtures and jest
+snapshots. Parsing the snapshots checks the plugins emit valid Swift.
+
+### A bug the suite found
+
+`expo-uiscene-lifecycle`'s `disable()` path re-inserts the startup block from a
+hardcoded string:
+
+```swift
+factory.startReactNative(
+  withModuleName: "main",        // always "main"
+  in: window,
+  launchOptions: launchOptions)  // always "launchOptions"
+```
+
+An app that registers a different root component gets `"main"` written in, and
+an app that renamed the parameter gets code referencing a name that no longer
+exists. Latent rather than live today, because `enable()` refuses any
+non-standard AppDelegate, so you cannot reach that state through the plugin —
+but a scene-based template or a hand-written delegate gets there.
 
 ## An upstream bug in tree-sitter-swift
 
