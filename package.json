@@ -1,15 +1,42 @@
 {
   "name": "native-ast",
-  "version": "0.0.2",
-  "private": true,
+  "version": "0.0.1",
+  "description": "Swift and Kotlin AST traversal from TypeScript, for Expo config plugins",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gabrieldonadel/native-ast.git"
   },
-  "description": "Prototype: Swift and Kotlin AST traversal from TypeScript for Expo config plugins",
-  "main": "src/index.js",
+  "keywords": [
+    "ast",
+    "tree-sitter",
+    "swift",
+    "kotlin",
+    "expo",
+    "config-plugins",
+    "codemod"
+  ],
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./tree-sitter-swift.wasm": "./tree-sitter-swift.wasm",
+    "./tree-sitter-kotlin.wasm": "./tree-sitter-kotlin.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src/**/*.js",
+    "tree-sitter-swift.wasm",
+    "tree-sitter-kotlin.wasm",
+    "scanner-calloc.patch",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
+    "smoke": "node test/smoke.js wasm",
+    "smoke:native": "node test/smoke.js native",
     "swift:native": "node test/compare.js native",
     "swift:wasm": "node test/compare.js wasm",
     "kotlin:native": "node test/compare-kotlin.js native",

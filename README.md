@@ -14,11 +14,15 @@ and plan.**
 ## What's here
 
 ```
-src/core.js        parse, traverse, splice-based edits, idempotency, error reporting
-src/languages.js   per-language adapters (Swift and Kotlin node names and shapes)
-test/              head-to-head against the shipping regex transforms, corpus tools
-build-wasm.sh      rebuild both .wasm grammars (needs emsdk)
-scanner-calloc.patch   upstream fix for tree-sitter-swift (see below)
+src/core.js             parse, traverse, splice-based edits, idempotency, error reporting
+src/languages.js        per-language adapters (Swift and Kotlin node names and shapes)
+test/smoke.js           self-contained; what CI runs before publishing
+test/compare*.js        head-to-head against the shipping regex transforms
+test/corpus.js          native-vs-WASM equivalence and error rates over a corpus
+tree-sitter-*.wasm      the two grammars, committed so CI needs no emscripten
+build-wasm.sh           rebuild both .wasm grammars (needs emsdk)
+scanner-calloc.patch    upstream fix for tree-sitter-swift (see below)
+RELEASING.md            how to cut a release
 ```
 
 ## API
@@ -49,6 +53,14 @@ kotlin.type('MainActivity').func('createReactActivityDelegate()');
 `hasParseErrors`, `errorRegions()` and `isWellFormed` let a plugin fail loudly
 when the region it wants to edit did not parse, instead of silently doing
 nothing.
+
+The named helpers — `addImport`, `addModifier`, `setSupertype`,
+`replaceReturnValue`, `appendMember`, `prependStatement`,
+`insertBeforeLastReturn` — check current state first and queue nothing if the
+change is already applied. `file.edits.replace(start, end, text)` is the raw
+escape hatch for anything they do not cover, and it is **not** idempotent:
+guard it yourself, or re-running the plugin will apply the edit twice.
+`test/smoke.js` has a worked example.
 
 ## Results
 
@@ -126,11 +138,16 @@ affects development here: the native binding is a devDependency used to diff
 WASM against native, and the one runtime dependency — `web-tree-sitter` — has
 no such conflict.
 
+## Releasing
+
+See [RELEASING.md](./RELEASING.md). Push a `vX.Y.Z` tag; CI verifies the
+tarball and publishes to npm via trusted publishing.
+
 ## Status
 
-Prototype. Not published to npm, not used by anything. Nothing here has been
-compiled by Xcode or Gradle — transformed files re-parse cleanly and trees
-match the native parser, but that is not the same as building.
+Prototype. Not used by anything yet. Nothing here has been compiled by Xcode or
+Gradle — transformed files re-parse cleanly and trees match the native parser,
+but that is not the same as building.
 
 ## License
 

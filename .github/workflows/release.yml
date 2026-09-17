@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write # npm trusted publishing (OIDC)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # OIDC trusted publishing needs npm >= 11.5.1. Pin npm 11 —
+      # npm 12 dropped Node 20 support.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install -g npm@11
+
+      # .npmrc sets legacy-peer-deps because both grammar packages pin stale
+      # tree-sitter peer ranges. They are devDependencies only.
+      - run: npm ci
+
+      - name: Check tag matches package.json version
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+
+      # The .wasm grammars are committed, so CI needs no emscripten and there
+      # is no build step. Guard against publishing a tarball without them.
+      - name: Check the .wasm grammars are in the tarball
+        run: |
+          npm pack --dry-run --json > "$RUNNER_TEMP/pack.json"
+          node -e "
+            const files = require(process.env.RUNNER_TEMP + '/pack.json')[0].files.map(f => f.path);
+            for (const w of ['tree-sitter-swift.wasm', 'tree-sitter-kotlin.wasm']) {
+              if (!files.includes(w)) { console.error('missing from tarball: ' + w); process.exit(1); }
+            }
+            console.log('tarball contains both grammars (' + files.length + ' files)');
+          "
+
+      # Self-contained: the swift:*/kotlin:* head-to-head tests need a local
+      # expo/expo checkout, so CI runs the portable smoke test instead.
+      - run: npm run smoke
+
+      # No registry-url needed: OIDC trusted publishing uses no .npmrc auth.
+      - run: npm publish
