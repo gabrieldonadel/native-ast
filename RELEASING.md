@@ -64,10 +64,12 @@ real release is `0.0.1`.
 3. **`npm run grammar-sync` passes**: the `grammars/` submodules are on the
    same versions as the npm grammar packages, and the Swift fork carries the
    scanner fix.
-4. **`npm run smoke` passes** on the WASM backend: parses and edits a Swift and
+4. **`npm test` passes**: the API suite in `test/api/`, one group per
+   `codeMod.ts` function, comparing the real shipping helpers against this API.
+5. **`npm run smoke` passes** on the WASM backend: parses and edits a Swift and
    a Kotlin fixture, asserts the output re-parses and that re-running is a
    no-op, and asserts `#if DEBUG` parses.
-5. **`npm run plugins` passes**: the community-plugin suite from
+6. **`npm run plugins` passes**: the community-plugin suite from
    expo/config-plugins.
 
 ## Notes

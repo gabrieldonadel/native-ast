@@ -55,6 +55,7 @@ jobs:
           "
 
       # Behavioural gates on the freshly built artifacts.
+      - run: npm test
       - run: npm run smoke
       - run: npm run plugins
 

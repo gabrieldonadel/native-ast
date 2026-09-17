@@ -1,13 +1,14 @@
 const { parseSwift, useBackend } = require('../src/index.js');
 const { vanilla, customized, withConditionalDecl } = require('./fixtures.js');
 
-/* ---------- 1. the shipping regex implementation (copied from expo/main) ---------- */
-function addSwiftImports(source, imports) {
-  const lines = source.split('\n');
-  const i = lines.findIndex((l) => l.match(/^import .*$/));
-  for (const imp of imports) if (!source.includes(imp)) lines.splice(i + 1, 0, `import ${imp}`);
-  return lines.join('\n');
-}
+/* ---------- 1. the shipping regex implementation ----------------------------
+ * addSwiftImports is the real one from @expo/config-plugins. The transform
+ * around it is transcribed from install-expo-modules' updateModulesAppDelegateSwift,
+ * because that package publishes only .d.ts files — its build output is not
+ * importable. See test/api/ for per-function tests against the real helpers.
+ */
+const { addSwiftImports } = require('@expo/config-plugins/build/ios/codeMod');
+
 function regexTransform(contents) {
   if (!contents.match(/^(internal\s+)?import\s+Expo\s*$/m)) {
     contents = addSwiftImports(contents, ['Expo']);

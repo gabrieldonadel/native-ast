@@ -35,6 +35,8 @@
     "node": ">=18"
   },
   "scripts": {
+    "test": "node --test test/api/",
+    "test:native": "NATIVE_AST_BACKEND=native node --test test/api/",
     "smoke": "node test/smoke.js wasm",
     "smoke:native": "node test/smoke.js native",
     "grammar-sync": "node test/grammar-sync.js",

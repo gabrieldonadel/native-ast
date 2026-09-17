@@ -1,39 +1,18 @@
 const { parseKotlin, useBackend } = require('../src/index.js');
 const { vanilla, customized, withCompanion } = require('./fixtures-kotlin.js');
 
-/* ---- 1. the shipping regex implementation (copied from expo/main) ---------- */
-// @expo/config-plugins/src/utils/matchBrackets.ts
-function findMatchingBracketPosition(contents, bracket, offset = 0) {
-  const pairs = { '{': '}', '(': ')', '[': ']' };
-  const open = bracket, close = pairs[bracket];
-  let start = contents.indexOf(open, offset);
-  if (start < 0) return -1;
-  let depth = 0;
-  for (let i = start; i < contents.length; i++) {
-    if (contents[i] === open) depth++;
-    else if (contents[i] === close) { depth--; if (depth === 0) return i; }
-  }
-  return -1;
-}
-// @expo/config-plugins/src/android/codeMod.ts
-function findNewInstanceCodeBlock(contents, classDeclaration, language) {
-  let start = contents.search(new RegExp(` (object\\s*:\\s*)?${classDeclaration}\\(`));
-  if (start < 0) return null;
-  start += 1;
-  let end = findMatchingBracketPosition(contents, '(', start);
-  const nextBrace = contents.indexOf('{', end + 1);
-  const isAnonymousClass = nextBrace >= end && !!contents.substring(end + 1, nextBrace).match(/^\s*$/);
-  if (isAnonymousClass) end = findMatchingBracketPosition(contents, '{', end);
-  return { start, end, code: contents.substring(start, end + 1) };
-}
-function addImports(source, imports, isJava) {
-  const lines = source.split('\n');
-  const i = lines.findIndex((l) => l.match(/^package .*;?$/));
-  for (const imp of imports) {
-    if (!source.includes(imp)) lines.splice(i + 1, 0, `import ${imp}${isJava ? ';' : ''}`);
-  }
-  return lines.join('\n');
-}
+/* ---- 1. the shipping regex implementation ----------------------------------
+ * findNewInstanceCodeBlock and addImports are the real ones from
+ * @expo/config-plugins. The transform around them is transcribed from
+ * install-expo-modules' setModulesMainActivity, because that package publishes
+ * only .d.ts files — its build output is not importable. See test/api/ for
+ * per-function tests against the real helpers.
+ */
+const {
+  findNewInstanceCodeBlock,
+  addImports,
+} = require('@expo/config-plugins/build/android/codeMod');
+
 function regexTransform(contents) {
   if (contents.match(/\s+ReactActivityDelegateWrapper\(/m) != null) return contents;
   if (contents.match(/\s+createReactActivityDelegate\(\)/m) == null) {

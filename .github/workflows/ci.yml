@@ -32,6 +32,7 @@ jobs:
       # smoke asserts '#if DEBUG' parses, which fails if the Swift grammar lost
       # the scanner fix. plugins runs the suite from expo/config-plugins; its
       # parse-conformance section self-skips without a local checkout.
+      - run: npm test
       - run: npm run smoke
       - run: npm run plugins
 

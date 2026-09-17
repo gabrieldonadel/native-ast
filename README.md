@@ -16,6 +16,7 @@ and plan.**
 ```
 src/core.js             parse, traverse, splice-based edits, idempotency, error reporting
 src/languages.js        per-language adapters (Swift and Kotlin node names and shapes)
+test/api/               npm test — per-function: the old regex vs the AST API
 test/smoke.js           self-contained; what CI runs before publishing
 test/config-plugins/    real community plugins from expo/config-plugins as a suite
 test/compare*.js        head-to-head against the shipping regex transforms
@@ -92,6 +93,43 @@ Startup depends on whether the file cache is warm. On a cold cache native is
 slower, because it pages in a 3.4 MB addon: 33 ms against WASM's 20 ms. Once
 warm, native wins: ~6 ms against ~15 ms. Both are small enough not to matter
 for a prebuild that parses one file.
+
+## Tests: the old regex API vs this one
+
+`npm test` is a `node:test` suite with one group per function in
+`@expo/config-plugins`' `codeMod.ts`. Each group calls the **real shipping
+function** and pins its actual behaviour, then asserts what native-ast does
+instead. If config-plugins changes one of these, the test fails and we find out.
+
+| `codeMod.ts` | native-ast | what the regex does |
+|---|---|---|
+| `addSwiftImports` | `file.addImport()` | no-ops when the module name is a substring of something else, or appears in a comment |
+| `findSwiftFunctionCodeBlock` | `file.func(selector)` | resolves overloads by parameter **count**, so it returns the wrong one; matches commented-out functions |
+| `insertContentsInsideSwiftFunctionBlock` | `fn.prependStatement()`, `fn.insertBeforeLastReturn()` | returns the input unchanged when the selector misses |
+| `insertContentsInsideSwiftClassBlock` | `type.appendMember()` | throws when a brace appears in a string literal |
+| `addImports` (android) | `file.addImport()` | no-ops when the path appears in a comment; inserts ahead of existing imports |
+| `findNewInstanceCodeBlock` | AST call lookup | matches a constructor call inside a doc comment |
+| `appendContentsInsideDeclarationBlock` | `type.appendMember()` | throws when a brace appears in a comment |
+| `findGradlePluginCodeBlock` | AST call lookup (`.gradle.kts`) | matches a mention in a comment |
+
+30 tests, run on both backends (`npm test`, `npm run test:native`).
+
+### A bug in shipping config-plugins
+
+`findSwiftFunctionCodeBlock` compares argument labels in a loop whose mismatch
+branch is `continue` — which advances the label loop instead of rejecting the
+candidate. Labels are therefore never compared; only arity is. On the standard
+Expo `AppDelegate.swift`, which has three overloads of `application`, two of
+them taking three parameters:
+
+```js
+findSwiftFunctionCodeBlock(src, 'application(_:continue:restorationHandler:)')
+// returns the body of application(_:open:options:)
+```
+
+So `insertContentsInsideSwiftFunctionBlock` with that selector injects code
+into the wrong method, silently. Pinned in
+[`test/api/swift-codemod.test.js`](./test/api/swift-codemod.test.js).
 
 ## Tested against real config plugins
 
@@ -201,9 +239,12 @@ standalone diff, kept for upstreaming.
 npm i        # see .npmrc — both grammars' `tree-sitter` peer ranges lag the runtime
 npm run build:wasm   # required first in a source checkout; see Grammars below
 
-npm run swift:native    # regex vs AST, Swift
+npm test                # the API suite: old regex vs AST, per function
+npm run test:native     # the same, against the native bindings
+npm run plugins         # the expo/config-plugins community suite
+npm run swift:native    # whole-transform head-to-head, Swift
 npm run swift:wasm
-npm run kotlin:native   # regex vs AST, Kotlin
+npm run kotlin:native   # whole-transform head-to-head, Kotlin
 npm run kotlin:wasm
 npm run bench           # cold start + parse cost
 npm run probe           # the Swift '#' minimal cases
