@@ -94,7 +94,7 @@ upstream.
 ## Reproduce
 
 ```sh
-npm i
+npm i        # see .npmrc — both grammars' `tree-sitter` peer ranges lag the runtime
 
 npm run swift:native    # regex vs AST, Swift
 npm run swift:wasm
@@ -112,6 +112,15 @@ node test/corpus.js swift  '*.swift'      ~/path/to/some-ios-app
 node test/corpus.js kotlin '*.kt'         ~/path/to/expo
 node test/corpus.js kotlin '*.gradle.kts' ~/path/to/expo
 ```
+
+## Note on installing
+
+`.npmrc` sets `legacy-peer-deps=true`. Both grammar packages pin stale
+`tree-sitter` peer ranges (`^0.22.1` for Swift, `^0.22.4` for Kotlin) against
+the 0.25.1 runtime, so a plain `npm i` fails with `ERESOLVE`. This only
+affects development here: the native binding is a devDependency used to diff
+WASM against native, and the one runtime dependency — `web-tree-sitter` — has
+no such conflict.
 
 ## Status
 
