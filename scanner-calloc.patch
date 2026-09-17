@@ -1,0 +1,22 @@
+Fix zero-byte allocation of the external scanner state.
+
+`calloc(0, sizeof(struct ScannerState))` allocates **zero bytes**; the
+arguments are in the wrong order. Every subsequent read and write of
+`state->ongoing_raw_str_hash_count` is therefore out of bounds.
+
+macOS `malloc` happens to return zeroed memory for a 0-byte request, so the
+native build works by luck. Emscripten's dlmalloc does not, so in WASM the
+counter starts as garbage, the `hash_count == 0` branch in `eat_raw_str_part`
+never runs, and no `#` token is ever produced. That breaks `#if`, `#selector`,
+`#available`, macro invocations and raw string literals.
+
+Measured on 6742 Swift files: 912 files error in WASM but not native before
+this fix; 0 after. Trees become byte-identical to the native build.
+
+--- a/src/scanner.c
++++ b/src/scanner.c
+@@ -234,7 +234,7 @@
+ void *tree_sitter_swift_external_scanner_create() {
+-    return calloc(0, sizeof(struct ScannerState));
++    return calloc(1, sizeof(struct ScannerState));
+ }

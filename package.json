@@ -1,0 +1,29 @@
+{
+  "name": "native-ast",
+  "version": "0.0.2",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gabrieldonadel/native-ast.git"
+  },
+  "description": "Prototype: Swift and Kotlin AST traversal from TypeScript for Expo config plugins",
+  "main": "src/index.js",
+  "scripts": {
+    "swift:native": "node test/compare.js native",
+    "swift:wasm": "node test/compare.js wasm",
+    "kotlin:native": "node test/compare-kotlin.js native",
+    "kotlin:wasm": "node test/compare-kotlin.js wasm",
+    "bench": "node test/bench.js",
+    "probe": "node test/probe-hash.js ./tree-sitter-swift.wasm",
+    "build:wasm": "./build-wasm.sh"
+  },
+  "dependencies": {
+    "web-tree-sitter": "0.25.10"
+  },
+  "devDependencies": {
+    "@tree-sitter-grammars/tree-sitter-kotlin": "1.1.0",
+    "tree-sitter": "0.25.1",
+    "tree-sitter-swift": "0.7.1"
+  }
+}
