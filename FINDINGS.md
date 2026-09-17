@@ -428,13 +428,20 @@ not — that was the first run only.)
    no ABI risk, no platform matrix, works in any Node and in the browser. Both
    are provably tree-identical to native across 11109 files (6742 Swift +
    4367 Kotlin).
-2. **Upstream three fixes.** The Swift `calloc(0, …)` (blocking: nobody can use
-   tree-sitter-swift from WASM until it lands), the two Swift shift-overflow UB
-   sites, and `npm-check-updates` miscategorised as a runtime dep in the Kotlin
-   grammar.
+2. **Own the grammars as forks, pinned as submodules.** Both grammars are now
+   forks in `grammars/`, pinned to the commit matching their npm release and
+   verified byte-identical to it. The Swift fork's `native-ast` branch carries
+   the `calloc(0, …)` fix (blocking: nobody can use tree-sitter-swift from WASM
+   without it) and the two shift-overflow UB sites; the Kotlin fork's moves
+   `npm-check-updates` out of runtime `dependencies`. Each is a separate,
+   cherry-pickable commit if upstream wants them, but nothing waits on review.
+   `npm run grammar-sync` asserts the submodules and the npm grammar packages
+   stay on the same versions — otherwise "WASM matches native" compares two
+   different grammars and means nothing.
 3. **Vendor the artifacts and pin the runtime.** Building needs emsdk, which is
-   not a reasonable install-time dependency. §6 shows recovery behaviour changes
-   between runtime versions, so pin `web-tree-sitter`.
+   not a reasonable install-time dependency, so the `.wasm` files are committed
+   and the submodules are only needed to rebuild them. §6 shows recovery
+   behaviour changes between runtime versions, so pin `web-tree-sitter`.
 4. **Start with Kotlin, not Swift.** Lower error rate (0.78% vs 6.35%), no
    patch needed, `.gradle.kts` free, and the worst regex failure mode found in
    this whole investigation (comment corruption) is on the Android side.
@@ -482,7 +489,15 @@ node test/corpus.js kotlin '*.gradle.kts' ~/Developer/expo …
 ./build-wasm.sh         # rebuild both .wasm files (needs emsdk on PATH)
 ```
 
-`tree-sitter-swift.wasm` is built from `tree-sitter-swift@0.7.1` with
-`scanner-calloc.patch`. `tree-sitter-kotlin.wasm` is built unpatched from
-`@tree-sitter-grammars/tree-sitter-kotlin@1.1.0`. Both via
-`tree-sitter-cli@0.25.10` and emscripten 3.1.74.
+Both `.wasm` files are built from the forks in `grammars/`, via
+`tree-sitter-cli@0.25.10` and emscripten 3.1.74:
+
+- `tree-sitter-swift` at `0.7.1-with-generated-files` plus the scanner fixes —
+  byte-identical to `tree-sitter-swift@0.7.1` on npm before patching.
+- `tree-sitter-kotlin` at `v1.1.0`, no grammar changes — byte-identical to
+  `@tree-sitter-grammars/tree-sitter-kotlin@1.1.0` on npm.
+
+Rebuilding from the submodules reproduces the Kotlin artifact byte-for-byte.
+The Swift artifact differs from the earlier calloc-only build by the two shift
+fixes, which measurably change nothing: 0 tree divergence from native across
+all three corpora either way.

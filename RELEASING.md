@@ -44,24 +44,44 @@ real release is `0.0.1`.
    "0.0.2"`.
 2. **Both `.wasm` grammars are in the tarball.** They are the whole package —
    a tarball without them installs and then fails at `Language.load`.
-3. **`npm run smoke` passes** on the WASM backend: parses and edits a Swift and
+3. **`npm run grammar-sync` passes**: the `grammars/` submodules are on the
+   same versions as the npm grammar packages, and the Swift fork carries the
+   scanner fix.
+4. **`npm run smoke` passes** on the WASM backend: parses and edits a Swift and
    a Kotlin fixture, asserts the output re-parses and that re-running is a
-   no-op, and asserts `#if DEBUG` parses (see the patch note below).
+   no-op, and asserts `#if DEBUG` parses.
+5. **`npm run plugins` passes**: the community-plugin suite from
+   expo/config-plugins.
 
 ## Notes
 
 - **The `.wasm` grammars are committed to git.** CI publishes them from a plain
-  checkout and does not need emscripten. After changing a grammar version or
-  the patch, run `npm run build:wasm` (needs emsdk on `PATH`) and commit the
-  new `tree-sitter-swift.wasm` / `tree-sitter-kotlin.wasm`.
+  checkout and does not need emscripten or the submodules.
 
-- **`tree-sitter-swift.wasm` carries a patch.** `build-wasm.sh` applies
-  [`scanner-calloc.patch`](./scanner-calloc.patch) before compiling: upstream's
+- **They are built from `grammars/`, our two forks pinned as submodules.** To
+  change a grammar: update the fork, move the submodule pointer, then
+
+  ```sh
+  git submodule update --init --recursive
+  source /path/to/emsdk/emsdk_env.sh
+  npm run build:wasm
+  npm run grammar-sync     # keep the npm grammar devDeps on the same version
+  ```
+
+  and commit both the new `.wasm` files and the submodule pointer.
+
+- **The Swift fork carries scanner fixes.** Upstream's
   `external_scanner_create()` calls `calloc(0, sizeof(struct ScannerState))`,
-  which allocates zero bytes, and without the fix every `#` token fails in
-  WASM. The smoke test asserts `#if DEBUG` parses, so an unpatched rebuild
-  fails CI rather than shipping. The Kotlin grammar needs no patch — its
-  scanner is stateless.
+  which allocates zero bytes; without the fix every `#` token fails in WASM.
+  `build-wasm.sh` refuses to build a submodule missing it, and the smoke test
+  asserts `#if DEBUG` parses, so an unpatched grammar cannot ship.
+  [`scanner-calloc.patch`](./scanner-calloc.patch) is the standalone diff kept
+  for upstreaming. The Kotlin grammar needs no patch — its scanner is stateless.
+
+- **`grammar-sync` guards a real hazard.** The `.wasm` comes from `grammars/`
+  and the native backend used for diffing comes from the npm grammar packages.
+  If they drift to different versions, the equivalence tests compare nothing.
+  CI runs `npm run grammar-sync` before publishing.
 
 - **Only `web-tree-sitter` is a runtime dependency.** `tree-sitter` and the two
   native grammar packages are devDependencies, used to diff WASM against native.

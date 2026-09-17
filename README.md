@@ -20,9 +20,10 @@ test/smoke.js           self-contained; what CI runs before publishing
 test/config-plugins/    real community plugins from expo/config-plugins as a suite
 test/compare*.js        head-to-head against the shipping regex transforms
 test/corpus.js          native-vs-WASM equivalence and error rates over a corpus
-tree-sitter-*.wasm      the two grammars, committed so CI needs no emscripten
-build-wasm.sh           rebuild both .wasm grammars (needs emsdk)
-scanner-calloc.patch    upstream fix for tree-sitter-swift (see below)
+grammars/               the two grammar forks, pinned as git submodules
+tree-sitter-*.wasm      built from grammars/, committed so CI needs no emscripten
+build-wasm.sh           rebuild both .wasm from the submodules (needs emsdk)
+scanner-calloc.patch    the tree-sitter-swift fix, for upstreaming (see below)
 RELEASING.md            how to cut a release
 ```
 
@@ -146,7 +147,34 @@ exists. Latent rather than live today, because `enable()` refuses any
 non-standard AppDelegate, so you cannot reach that state through the plugin —
 but a scene-based template or a hand-written delegate gets there.
 
-## An upstream bug in tree-sitter-swift
+## Grammars
+
+The `.wasm` files are built from forks pinned as submodules, not from npm:
+
+| submodule | fork | pinned at |
+|---|---|---|
+| `grammars/tree-sitter-swift` | [gabrieldonadel/tree-sitter-swift](https://github.com/gabrieldonadel/tree-sitter-swift) `native-ast` | `0.7.1-with-generated-files` + 2 fixes |
+| `grammars/tree-sitter-kotlin` | [gabrieldonadel/tree-sitter-kotlin](https://github.com/gabrieldonadel/tree-sitter-kotlin) `native-ast` | `v1.1.0` + 1 packaging fix |
+
+Both are byte-identical to their npm releases at those tags, so the
+measurements above carry over directly. The forks let us pin and patch without
+waiting on upstream review; the commits are written to be cherry-pickable if
+upstream wants them.
+
+```sh
+git submodule update --init --recursive   # only needed to rebuild the .wasm
+npm run build:wasm                        # needs emsdk on PATH
+npm run grammar-sync                      # asserts grammars/ matches the npm versions
+```
+
+Submodules are **not** needed to install or use the package — the `.wasm` files
+are committed and the published tarball contains no grammar sources.
+
+`npm run grammar-sync` exists because the native backend used for diffing comes
+from the npm grammar packages while the `.wasm` comes from `grammars/`. If those
+drift to different versions, "WASM matches native" stops meaning anything.
+
+### The Swift fix
 
 `tree_sitter_swift_external_scanner_create()` calls
 `calloc(0, sizeof(struct ScannerState))` — the arguments are reversed, so it
@@ -158,8 +186,9 @@ by accident; emscripten's dlmalloc does not, so in WASM every `#` token fails:
 Measured over 6742 files: 912 files error in WASM but not native before the
 fix, 0 after, and parse time drops from 6.18x native to 1.69x.
 
-See [`scanner-calloc.patch`](./scanner-calloc.patch). Not yet submitted
-upstream.
+Fixed on the fork's `native-ast` branch, along with two undefined-shift sites
+in the same scanner. [`scanner-calloc.patch`](./scanner-calloc.patch) is the
+standalone diff, kept for upstreaming.
 
 ## Reproduce
 

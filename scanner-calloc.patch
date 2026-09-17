@@ -1,3 +1,7 @@
+Standalone diff for upstreaming. Already applied on the `native-ast` branch
+of https://github.com/gabrieldonadel/tree-sitter-swift, which this repo
+consumes as the grammars/tree-sitter-swift submodule.
+
 Fix zero-byte allocation of the external scanner state.
 
 `calloc(0, sizeof(struct ScannerState))` allocates **zero bytes**; the

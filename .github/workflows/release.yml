@@ -13,6 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The .wasm artifacts are committed, so the grammars are not needed
+          # to publish — only to assert they match the npm grammar versions the
+          # native backend uses. See test/grammar-sync.js.
+          submodules: recursive
 
       # OIDC trusted publishing needs npm >= 11.5.1. Pin npm 11 —
       # npm 12 dropped Node 20 support.
@@ -43,6 +48,7 @@ jobs:
 
       # Self-contained: the swift:*/kotlin:* head-to-head tests need a local
       # expo/expo checkout, so CI runs the portable smoke test instead.
+      - run: npm run grammar-sync
       - run: npm run smoke
 
       # The community-plugin suite is self-contained: it vendors the shared

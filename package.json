@@ -37,6 +37,7 @@
   "scripts": {
     "smoke": "node test/smoke.js wasm",
     "smoke:native": "node test/smoke.js native",
+    "grammar-sync": "node test/grammar-sync.js",
     "plugins": "node test/config-plugins/run.js wasm",
     "plugins:native": "node test/config-plugins/run.js native",
     "swift:native": "node test/compare.js native",

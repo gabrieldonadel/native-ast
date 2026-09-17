@@ -1,0 +1,8 @@
+[submodule "grammars/tree-sitter-swift"]
+	path = grammars/tree-sitter-swift
+	url = https://github.com/gabrieldonadel/tree-sitter-swift.git
+	branch = native-ast
+[submodule "grammars/tree-sitter-kotlin"]
+	path = grammars/tree-sitter-kotlin
+	url = https://github.com/gabrieldonadel/tree-sitter-kotlin.git
+	branch = native-ast
